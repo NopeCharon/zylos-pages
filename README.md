@@ -164,6 +164,7 @@ Edit `~/zylos/components/pages/config.json`:
   "security": {
     "allowRawHtml": false,
     "maxFileSizeBytes": 10485760,
+    "maxMediaFileSizeBytes": 209715200,
     "maxAttachmentSizeBytes": 52428800
   },
   "sharing": {
@@ -203,7 +204,9 @@ The `state` ceilings and write-rate limits apply only to share-link visitors;
 authenticated owner writes are intentionally exempt.
 
 `security.maxFileSizeBytes` remains the render ceiling (default 10 MiB; it
-also caps each relative image or asset a page loads). `rateLimit` caps
+also caps each relative non-media asset a page loads). Audio/video assets use
+`security.maxMediaFileSizeBytes` (default 200 MiB), stream with HTTP Range support,
+and have signed URLs valid for six hours (capped by the share expiry). `rateLimit` caps
 requests per client IP (default 600 per 60 s). Upgrades never change a value
 already present in `config.json`; the new defaults apply to new installs and
 to keys that are absent. The separate
@@ -271,3 +274,34 @@ Zylos is the open-source core of [OpenMax](https://openmax.com/) — the Human �
 ## License
 
 [MIT](./LICENSE)
+
+### Paginated owner page lists
+
+The admin list and page sidebar load only direct children of the current folder,
+50 items at a time. Open a folder to fetch its contents and use **Load more** for
+later batches. Both lists search titles on the server with the same batching;
+the displayed total comes from a database count. The sidebar reveals the current
+page's ancestor path without loading every sibling. Admin expansion/collapse
+memory is scoped to the instance's browser base path; only paths confirmed absent
+by the server are pruned.
+
+Owner session required (anonymous and share viewers receive 403):
+
+```text
+GET /api/pages?folder=&limit=50&offset=0
+GET /api/pages?folder=reports/weekly&limit=50&offset=50
+GET /api/pages?q=report&limit=50&offset=0
+```
+
+Responses contain `items` (folders with `path`, `name`, descendant-page `count`,
+or pages with `kind: "page"` and page metadata), global page `total`,
+`matchedTotal` (direct items or search matches), and `nextOffset` (`null` at end).
+Folder responses also contain `folderTotal` (pages below the requested folder).
+`limit` is 1–100; `offset` is a nonnegative integer. Folder and search wildcard
+characters are literal. `folderExists=path` checks one remembered folder;
+`viewPath=/p/uri` checks one owner navigation target without embedding a complete
+page allowlist in HTML. Share shells retain their linked-destination allowlist.
+
+For compatibility, `/api/pages` without pagination parameters still returns
+`pages` and `total`; its legacy `q` search keeps the 100-result ceiling.
+CLI `pages list` remains unchanged: all pages by default, optional `--limit N`.
