@@ -22,6 +22,7 @@ const {
   HTML_ARTIFACT_CSP,
   SANDBOXED_HTML_ARTIFACT_CSP,
   securityHeaders,
+  sandboxedHtmlArtifactCsp,
 } = await import('../src/security/headers.js');
 const { notFoundTemplate, errorTemplate } = await import('../src/templates/errorTemplate.js');
 const { resolvePageDescriptor, resolveSafePath } = await import('../src/security/pathGuard.js');
@@ -315,9 +316,9 @@ test('enabled HTML sandbox uses trusted shells and rejects non-iframe raw naviga
       assert.doesNotMatch(ownerShellBody, /allow-same-origin/);
       assert.match(ownerShellBody, /sandboxed\?raw=1/);
       assert.match(ownerShellBody, /data-page-open-base="\/sandboxed"/);
-      for (const route of ['/p/linked', '/linked', '/p/confidential', '/confidential']) {
-        assert.match(ownerShellBody, new RegExp(`&quot;${route}&quot;`));
-      }
+      assert.match(ownerShellBody, /data-page-open-check="\/api\/pages"/);
+      assert.match(ownerShellBody, /data-page-open-paths="\[\]"/);
+      assert.doesNotMatch(ownerShellBody, /&quot;\/p\/confidential&quot;/);
 
       const missingDest = await ownerFetch(`${origin}/sandboxed?raw=1`);
       assert.equal(missingDest.status, 403);
@@ -424,8 +425,8 @@ test('navigation bridge is injected only from the trusted shell and read policy 
       assert.match(shell, /_assets\/bridge\.js/);
       assert.match(shell, /sandbox="allow-scripts"/);
       assert.match(shell, /data-outbound-denied="true"/);
-      assert.match(shell, /data-page-open-paths="[^"]*&quot;\/p\/bridge-policy&quot;[^"]*"/);
-      assert.match(shell, /data-page-open-paths="[^"]*&quot;\/p\/navigation-only&quot;[^"]*"/);
+      assert.match(shell, /data-page-open-paths="\[\]"/);
+      assert.match(shell, /data-page-open-check="\/api\/pages"/);
       assert.match(response.headers.get('content-security-policy'), /frame-src http:\/\/127\.0\.0\.1:\d+\/bridge-policy/);
 
       response = await fetch(`${origin}/navigation-only`);
@@ -654,5 +655,14 @@ test('500 error response carries X-Robots-Tag header', async () => {
     assert.match(await res.text(), /<meta name="robots" content="noindex, nofollow">/);
   } finally {
     server.close();
+  }
+});
+
+
+test('HTML artifact CSPs explicitly allow same-origin media', () => {
+  for (const csp of [HTML_ARTIFACT_CSP, SANDBOXED_HTML_ARTIFACT_CSP,
+    sandboxedHtmlArtifactCsp(), sandboxedHtmlArtifactCsp({ scriptsEnabled: false }),
+    sandboxedHtmlArtifactCsp({ outboundDenied: true })]) {
+    assert.match(csp, /(?:^|; )media-src 'self'(?: data:)?;/);
   }
 });
