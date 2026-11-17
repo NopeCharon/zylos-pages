@@ -18,7 +18,7 @@ import {
 } from '../sharing/share-manager.js';
 import { browserBaseFromRequest, browserPath, browserRoot, cookiePathFromBase, isPathWithinBase } from '../lib/browser-base.js';
 import { OWNER_SESSION_COOKIE_NAME, pagesCookieHeader, setupCookieBoundary } from './cookie-boundary.js';
-import { isAssetExtension } from '../utils/mime.js';
+import { getMimeType, isAssetExtension, isMediaType } from '../utils/mime.js';
 import { AUTH_CARD_CSS } from '../templates/authCardStyles.js';
 import path from 'node:path';
 import { getLogicalPageById } from '../pages/page-store.js';
@@ -571,6 +571,10 @@ export function setupAuth(app, authConfig, sharingConfig = { enabled: true }) {
       return next();
     }
 
+    if (req.path === '/api/pages' || req.path.startsWith('/api/pages/')) {
+      return res.status(403).json({ error: 'Owner login required' });
+    }
+
     // Share access session bypass for pages and raw HTML artifacts —
     // unauthenticated fallback only. Kept as defense-in-depth for direct /p/
     // hits and legacy share links. Share pages now scope their <base href> to
@@ -613,7 +617,9 @@ export function setupAuth(app, authConfig, sharingConfig = { enabled: true }) {
       clearSelectedShareAccessCookies(res, result.clearCookieNames, cookiePathFromBase(browserBase));
     }
 
-    if (isAssetPath(req.path)) {
+    if (isAssetPath(req.path) || (req.path.startsWith('/assets/')
+        && typeof req.query.path === 'string'
+        && isMediaType(getMimeType(path.extname(req.query.path.split(/[?#]/, 1)[0]))))) {
       return res.status(403).end();
     }
 
